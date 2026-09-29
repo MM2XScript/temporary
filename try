@@ -1,641 +1,284 @@
--- Onyx Hunter Pro v2.0 - Optimized for Roblox Delta
-repeat task.wait(0.1) until game:IsLoaded()
+-- Ore Hunter Pro - CPU Optimized Version (Low Resource Usage)
+repeat task.wait(0.2) until game:IsLoaded()
 
--- Performance settings
-pcall(function()
-    settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
-    settings().Network.IncomingReplicationLag = 0
-end)
-
--- Services
+-- Minimal services
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local HttpService = game:GetService("HttpService")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local VirtualInputManager = game:GetService("VirtualInputManager")
-local GuiService = game:GetService("GuiService")
 
 local LocalPlayer = Players.LocalPlayer
 local PlaceId, JobId = game.PlaceId, game.JobId
-local PlayerGui = LocalPlayer:WaitForChild("PlayerGui", 30)
 
--- Configuration
+-- CPU-Friendly Configuration
 local Config = {
-    BootDelay = 5,
+    BootDelay = 3, -- Reduced boot time
     HopEnabled = true,
     MinPlayers = 1,
     MaxPlayers = 8,
-    BaseTimeout = 12.0,
-    MaxRetries = 3,
-    ScanInterval = 0.3,
+    BaseTimeout = 15.0,
+    ScanInterval = 2.0, -- Reduced CPU load - scan every 2 seconds
+    DamageInterval = 0.5, -- Less frequent damage calls
+    MovementInterval = 2.0, -- Less frequent movement updates
     TargetIDs = {
-        ["eclipseonyx"] = true,
-        ["eclipseonyxgem"] = true,
-        ["eclipseonyxore"] = true,
-        ["onyx"] = true,
-        ["onyxore"] = true,
-        ["onyxgem"] = true
+        ["onyx"] = true, ["onyxore"] = true, ["onyxgem"] = true,
+        ["sunstone"] = true, ["sunstonegem"] = true, ["sunstoneore"] = true,
+        ["eclipseonyx"] = true, ["eclipsesunstone"] = true
     }
 }
 
 local State = {
     IsBooting = true,
     BootTimer = Config.BootDelay,
-    OnyxCount = 0,
-    NoOnyxTimer = 0,
+    OreCount = 0,
+    NoOreTimer = 0,
     TotalHops = 0,
     InMiningZone = false,
     IsHopping = false,
     CurrentJitter = Config.BaseTimeout,
     TargetPart = nil,
     TargetId = nil,
-    CachedAutoBtn = nil,
-    IsAutoFarmOn = false,
-    LastScanTime = 0,
-    HopAttempts = 0
+    LastScan = 0,
+    LastMove = 0,
+    LastDamage = 0
 }
 
--- Create GUI
+-- Lightweight GUI
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui", 10)
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "OnyxHunterPro"
+ScreenGui.Name = "OreHunterCPU"
 ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = PlayerGui
 
-local success, hui = pcall(function() return gethui() end)
-ScreenGui.Parent = success and hui or PlayerGui
+local Frame = Instance.new("Frame", ScreenGui)
+Frame.Size = UDim2.new(0, 250, 0, 140)
+Frame.Position = UDim2.new(0, 10, 0, 10)
+Frame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+Frame.Active = true
+Frame.Draggable = true
+Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 8)
 
-local MainFrame = Instance.new("Frame", ScreenGui)
-MainFrame.Size = UDim2.new(0, 260, 0, 220)
-MainFrame.Position = UDim2.new(0.02, 0, 0.15, 0)
-MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
-MainFrame.BorderSizePixel = 0
-MainFrame.Active = true
-MainFrame.Draggable = true
+local Title = Instance.new("TextLabel", Frame)
+Title.Size = UDim2.new(1, -10, 0, 25)
+Title.Position = UDim2.new(0, 5, 0, 5)
+Title.BackgroundTransparency = 1
+Title.Text = "Ore Hunter - CPU Optimized"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 14
+Title.Font = Enum.Font.SourceSansBold
 
-Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 8)
+local Status = Instance.new("TextLabel", Frame)
+Status.Size = UDim2.new(1, -10, 0, 20)
+Status.Position = UDim2.new(0, 5, 0, 30)
+Status.BackgroundTransparency = 1
+Status.Text = "Initializing..."
+Status.TextColor3 = Color3.fromRGB(100, 255, 100)
+Status.TextSize = 12
+Status.Font = Enum.Font.SourceSans
 
--- Title
-local TitleLabel = Instance.new("TextLabel", MainFrame)
-TitleLabel.Size = UDim2.new(1, -20, 0, 30)
-TitleLabel.Position = UDim2.new(0, 10, 0, 8)
-TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "Onyx Hunter Pro"
-TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-TitleLabel.TextSize = 18
-TitleLabel.Font = Enum.Font.SourceSansBold
-TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+local Info = Instance.new("TextLabel", Frame)
+Info.Size = UDim2.new(1, -10, 0, 50)
+Info.Position = UDim2.new(0, 5, 0, 55)
+Info.BackgroundTransparency = 1
+Info.Text = "Zone: Booting\nOres: 0 | Hops: 0"
+Info.TextColor3 = Color3.fromRGB(200, 200, 200)
+Info.TextSize = 11
+Info.Font = Enum.Font.Code
+Info.TextYAlignment = Enum.TextYAlignment.Top
 
--- Status
-local StatusLabel = Instance.new("TextLabel", MainFrame)
-StatusLabel.Size = UDim2.new(1, -20, 0, 22)
-StatusLabel.Position = UDim2.new(0, 10, 0, 40)
-StatusLabel.BackgroundTransparency = 1
-StatusLabel.Text = string.format("Initializing (%ds)...", Config.BootDelay)
-StatusLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
-StatusLabel.TextSize = 14
-StatusLabel.Font = Enum.Font.SourceSansBold
-StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+local HopBtn = Instance.new("TextButton", Frame)
+HopBtn.Size = UDim2.new(0.48, 0, 0, 25)
+HopBtn.Position = UDim2.new(0, 5, 1, -30)
+HopBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+HopBtn.Text = "HOP"
+HopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+HopBtn.TextSize = 12
+HopBtn.Font = Enum.Font.SourceSansBold
+Instance.new("UICorner", HopBtn).CornerRadius = UDim.new(0, 4)
 
--- Info Box
-local InfoBox = Instance.new("TextLabel", MainFrame)
-InfoBox.Size = UDim2.new(1, -20, 0, 60)
-InfoBox.Position = UDim2.new(0, 10, 0, 65)
-InfoBox.BackgroundTransparency = 1
-InfoBox.Text = "Zone: Booting\nOnyx: 0\nHops: 0\nStatus: Initializing"
-InfoBox.TextColor3 = Color3.fromRGB(200, 200, 220)
-InfoBox.TextSize = 12
-InfoBox.Font = Enum.Font.Code
-InfoBox.TextXAlignment = Enum.TextXAlignment.Left
-InfoBox.TextYAlignment = Enum.TextYAlignment.Top
+local AutoBtn = Instance.new("TextButton", Frame)
+AutoBtn.Size = UDim2.new(0.48, 0, 0, 25)
+AutoBtn.Position = UDim2.new(0.52, 0, 1, -30)
+AutoBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+AutoBtn.Text = "AUTO: ON"
+AutoBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+AutoBtn.TextSize = 12
+AutoBtn.Font = Enum.Font.SourceSansBold
+Instance.new("UICorner", AutoBtn).CornerRadius = UDim.new(0, 4)
 
--- Buttons
-local HopButton = Instance.new("TextButton", MainFrame)
-HopButton.Size = UDim2.new(0.48, 0, 0, 32)
-HopButton.Position = UDim2.new(0, 10, 1, -80)
-HopButton.BackgroundColor3 = Color3.fromRGB(220, 53, 69)
-HopButton.Text = "HOP NOW"
-HopButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-HopButton.TextSize = 14
-HopButton.Font = Enum.Font.SourceSansBold
-HopButton.BorderSizePixel = 0
-Instance.new("UICorner", HopButton).CornerRadius = UDim.new(0, 6)
-
-local AutoHopBtn = Instance.new("TextButton", MainFrame)
-AutoHopBtn.Size = UDim2.new(0.48, 0, 0, 32)
-AutoHopBtn.Position = UDim2.new(0.52, 0, 1, -80)
-AutoHopBtn.BackgroundColor3 = Color3.fromRGB(40, 167, 69)
-AutoHopBtn.Text = "AUTO: ON"
-AutoHopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-AutoHopBtn.TextSize = 14
-AutoHopBtn.Font = Enum.Font.SourceSansBold
-AutoHopBtn.BorderSizePixel = 0
-Instance.new("UICorner", AutoHopBtn).CornerRadius = UDim.new(0, 6)
-
-local ForceUIBtn = Instance.new("TextButton", MainFrame)
-ForceUIBtn.Size = UDim2.new(1, -20, 0, 32)
-ForceUIBtn.Position = UDim2.new(0, 10, 1, -40)
-ForceUIBtn.BackgroundColor3 = Color3.fromRGB(108, 117, 125)
-ForceUIBtn.Text = "Force Auto Farm"
-ForceUIBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-ForceUIBtn.TextSize = 13
-ForceUIBtn.Font = Enum.Font.SourceSansBold
-ForceUIBtn.BorderSizePixel = 0
-Instance.new("UICorner", ForceUIBtn).CornerRadius = UDim.new(0, 6)
-
--- Auto hop toggle
-AutoHopBtn.MouseButton1Click:Connect(function()
-    Config.HopEnabled = not Config.HopEnabled
-    if Config.HopEnabled then
-        AutoHopBtn.BackgroundColor3 = Color3.fromRGB(40, 167, 69)
-        AutoHopBtn.Text = "AUTO: ON"
-    else
-        AutoHopBtn.BackgroundColor3 = Color3.fromRGB(220, 53, 69)
-        AutoHopBtn.Text = "AUTO: OFF"
-    end
-end)
-
--- Enhanced server hopping function
-local function HopServer()
-    if State.IsHopping then return end
-    State.IsHopping = true
-    State.HopAttempts = State.HopAttempts + 1
-    
-    StatusLabel.Text = "Finding optimal server..."
-    StatusLabel.TextColor3 = Color3.fromRGB(138, 43, 226)
-    
-    task.spawn(function()
-        local success, result = pcall(function()
-            local httpreq = (request or http_request or syn and syn.request)
-            local url = string.format(
-                "https://games.roblox.com/v1/games/%s/servers/0?sortOrder=Asc&excludeFullGames=true&limit=100", 
-                tostring(PlaceId)
-            )
-            
-            local response
-            if httpreq then
-                response = httpreq({Url = url, Method = "GET"})
-                return HttpService:JSONDecode(response.Body)
-            else
-                return HttpService:JSONDecode(game:HttpGet(url))
-            end
-        end)
-
-        if success and result and result.data then
-            local validServers = {}
-            
-            for _, server in ipairs(result.data) do
-                if type(server) == "table" and 
-                   server.id ~= JobId and 
-                   server.playing and 
-                   server.playing >= Config.MinPlayers and 
-                   server.playing <= Config.MaxPlayers then
-                    table.insert(validServers, {id = server.id, players = server.playing})
-                end
-            end
-            
-            if #validServers > 0 then
-                table.sort(validServers, function(a, b) return a.players < b.players end)
-                
-                State.TotalHops = State.TotalHops + 1
-                StatusLabel.Text = "Teleporting to new server..."
-                StatusLabel.TextColor3 = Color3.fromRGB(0, 255, 127)
-                
-                local targetServer = validServers[math.min(3, #validServers)]
-                pcall(function() 
-                    TeleportService:TeleportToPlaceInstance(PlaceId, targetServer.id, LocalPlayer) 
-                end)
-                
-                task.wait(6)
-                State.IsHopping = false
-                return
-            end
-        end
-        
-        local retryDelay = math.min(5 + (State.HopAttempts * 2), 15)
-        StatusLabel.Text = string.format("No servers found. Retry in %ds", retryDelay)
-        StatusLabel.TextColor3 = Color3.fromRGB(255, 69, 0)
-        
-        task.wait(retryDelay)
-        State.IsHopping = false
-        
-        if State.HopAttempts > Config.MaxRetries then
-            State.HopAttempts = 0
-        end
-    end)
-end
-
-HopButton.MouseButton1Click:Connect(HopServer)
-
--- Enhanced click function
-local function ForceClickAutoFarm(btnTarget)
-    if not btnTarget then return false end
-    local success = false
-    pcall(function()
-        if firesignal and btnTarget:IsA("GuiButton") then
-            pcall(function() firesignal(btnTarget.Activated) end)
-            success = true
-        elseif getconnections then
-            for _, conn in pairs(getconnections(btnTarget.Activated)) do 
-                pcall(function() conn:Fire() end) 
-                success = true 
-                break 
-            end
-            if not success then
-                for _, conn in pairs(getconnections(btnTarget.MouseButton1Click)) do 
-                    pcall(function() conn:Fire() end) 
-                    success = true 
-                    break 
-                end
-            end
-        end
-        
-        if not success then
-            local inset = GuiService:GetGuiInset()
-            local cx = btnTarget.AbsolutePosition.X + (btnTarget.AbsoluteSize.X / 2) + inset.X
-            local cy = btnTarget.AbsolutePosition.Y + (btnTarget.AbsoluteSize.Y / 2) + inset.Y
-            pcall(function() VirtualInputManager:SendTouchEvent(1, 0, cx, cy) end)
-            task.wait(0.05)
-            pcall(function() VirtualInputManager:SendTouchEvent(1, 1, cx, cy) end)
-        end
-    end)
-    return success
-end
-
-ForceUIBtn.MouseButton1Click:Connect(function()
-    if State.CachedAutoBtn then
-        ForceUIBtn.Text = "Activating..."
-        ForceUIBtn.BackgroundColor3 = Color3.fromRGB(255, 193, 7)
-        
-        ForceClickAutoFarm(State.CachedAutoBtn)
-        
-        task.wait(0.5)
-        ForceUIBtn.Text = "Force Auto Farm"
-        ForceUIBtn.BackgroundColor3 = Color3.fromRGB(108, 117, 125)
-    else
-        ForceUIBtn.Text = "Button not found..."
-        ForceUIBtn.BackgroundColor3 = Color3.fromRGB(220, 53, 69)
-        
-        task.wait(1.5)
-        ForceUIBtn.Text = "Force Auto Farm"
-        ForceUIBtn.BackgroundColor3 = Color3.fromRGB(108, 117, 125)
-    end
-end)
-
--- Text analysis for auto farm detection
-local function AnalyzeGameText(txt)
-    if type(txt) ~= "string" then return end
-    local t = string.lower(txt)
-    if string.find(t, "auto") and (string.find(t, "mine") or string.find(t, "farm")) then
-        if string.find(t, "enabled") or string.find(t, "on") then
-            State.IsAutoFarmOn = true
-        elseif string.find(t, "disabled") or string.find(t, "off") then
-            State.IsAutoFarmOn = false
-        end
-    end
-end
-
--- Setup text analysis
-task.spawn(function()
-    for _, v in pairs(PlayerGui:GetDescendants()) do
-        if v:IsA("TextLabel") or v:IsA("TextBox") then
-            AnalyzeGameText(v.Text)
-            v:GetPropertyChangedSignal("Text"):Connect(function() AnalyzeGameText(v.Text) end)
-        end
-    end
-    PlayerGui.DescendantAdded:Connect(function(v)
-        if v:IsA("TextLabel") or v:IsA("TextBox") then
-            task.delay(0.1, function() AnalyzeGameText(v.Text) end)
-            v:GetPropertyChangedSignal("Text"):Connect(function() AnalyzeGameText(v.Text) end)
-        end
-    end)
-end)
-
--- Block cache system
-local BlockCache = {}
-local CacheTimeout = 1
-
--- Optimized block checking
-local function CheckBlock(block)
+-- Optimized ore detection (reduced CPU usage)
+local function CheckOre(block)
     if not block or not block.Parent then return false end
     
-    local blockId = tostring(block)
-    local currentTime = tick()
-    
-    if BlockCache[blockId] and (currentTime - BlockCache[blockId].time) < CacheTimeout then
-        return BlockCache[blockId].result
+    local name = string.lower(block.Name)
+    for target, _ in pairs(Config.TargetIDs) do
+        if string.find(name, target) then return true end
     end
     
-    if block:GetAttribute("Broken") or block:GetAttribute("Destroyed") then
-        BlockCache[blockId] = {result = false, time = currentTime}
-        return false
-    end
-    
-    local healthAttributes = {"Health", "health", "HP", "hp"}
-    for _, attr in ipairs(healthAttributes) do
-        local hp = block:GetAttribute(attr)
-        if hp ~= nil and tonumber(hp) <= 0 then
-            BlockCache[blockId] = {result = false, time = currentTime}
-            return false
-        end
-    end
-
-    local nameStr = string.lower(block.Name):gsub("[%s_%-]", "")
-    if string.find(nameStr, "onyx") or Config.TargetIDs[nameStr] then
-        BlockCache[blockId] = {result = true, time = currentTime}
-        return true
-    end
-
-    local attributeKeys = {"id", "Id", "ID", "Type", "BlockType", "Material"}
-    for _, key in ipairs(attributeKeys) do
-        local val = block:GetAttribute(key)
-        if val then
-            local strVal = string.lower(tostring(val)):gsub("[%s_%-]", "")
-            if string.find(strVal, "onyx") or Config.TargetIDs[strVal] then 
-                BlockCache[blockId] = {result = true, time = currentTime}
-                return true
-            end
-        end
-    end
-
-    if (block:IsA("Model") or block:IsA("Folder")) and #block:GetChildren() == 0 then
-        BlockCache[blockId] = {result = false, time = currentTime}
-        return false
-    end
-    
-    BlockCache[blockId] = {result = false, time = currentTime}
     return false
 end
--- Master scanner function
-local function UpdateMasterScanner()
+
+-- CPU-friendly scanner (runs less frequently)
+local function ScanForOres()
     local currentTime = tick()
-    if currentTime - State.LastScanTime < Config.ScanInterval then
-        return
-    end
+    if currentTime - State.LastScan < Config.ScanInterval then return end
+    State.LastScan = currentTime
     
-    State.LastScanTime = currentTime
     local count = 0
     local firstPart, firstId = nil, nil
-    local things = Workspace:FindFirstChild("__THINGS")
     
+    local things = Workspace:FindFirstChild("__THINGS")
     if things then
         State.InMiningZone = true
         
-        local function scanFolder(folder)
-            for _, container in ipairs(folder:GetChildren()) do
-                if container and container.Parent then
-                    for _, block in ipairs(container:GetChildren()) do
-                        if CheckBlock(block) then 
-                            count = count + 1 
-                            if not firstPart then
-                                firstPart = block:FindFirstChildWhichIsA("BasePart", true)
-                                firstId = block.Name
-                                if count > 10 then break end
-                            end
-                        end
+        -- Limit scanning to reduce CPU load
+        local scanned = 0
+        for _, container in pairs(things:GetChildren()) do
+            for _, block in pairs(container:GetChildren()) do
+                if CheckOre(block) then
+                    count = count + 1
+                    if not firstPart then
+                        firstPart = block:FindFirstChildWhichIsA("BasePart")
+                        firstId = block.Name
                     end
                 end
-                if count > 50 then break end
+                
+                scanned = scanned + 1
+                if scanned > 100 then break end -- Limit scanning for CPU
             end
+            if scanned > 100 then break end
         end
-        
-        local blockWorlds = things:FindFirstChild("BlockWorlds")
-        if blockWorlds then 
-            scanFolder(blockWorlds) 
-        end
-        
-        if count < 20 then
-            local breakables = things:FindFirstChild("Breakables")
-            if breakables then 
-                for _, block in ipairs(breakables:GetChildren()) do
-                    if CheckBlock(block) then 
-                        count = count + 1 
-                        if not firstPart then
-                            firstPart = block:FindFirstChildWhichIsA("BasePart", true)
-                            firstId = block.Name
-                        end
-                    end
-                    if count > 50 then break end
-                end
-            end
-        end
-    else 
-        State.InMiningZone = false 
+    else
+        State.InMiningZone = false
     end
     
-    State.OnyxCount = count
+    State.OreCount = count
     State.TargetPart = firstPart
     State.TargetId = firstId
-    
-    -- Cache cleanup
-    local blockCacheKeys = {}
-    for key, _ in pairs(BlockCache) do
-        table.insert(blockCacheKeys, key)
-    end
-    
-    if #blockCacheKeys > 100 then
-        for i = 1, 20 do
-            BlockCache[blockCacheKeys[i]] = nil
-        end
-    end
 end
 
--- Main loop
+-- Lightweight server hopper
+local function HopServer()
+    if State.IsHopping then return end
+    State.IsHopping = true
+    
+    Status.Text = "Finding server..."
+    Status.TextColor3 = Color3.fromRGB(255, 200, 100)
+    
+    task.spawn(function()
+        local success, result = pcall(function()
+            local url = string.format("https://games.roblox.com/v1/games/%s/servers/0?sortOrder=Asc&limit=50", PlaceId)
+            return HttpService:JSONDecode(game:HttpGet(url))
+        end)
+        
+        if success and result and result.data then
+            local servers = {}
+            for _, server in pairs(result.data) do
+                if server.id ~= JobId and server.playing >= Config.MinPlayers and server.playing <= Config.MaxPlayers then
+                    table.insert(servers, server.id)
+                end
+            end
+            
+            if #servers > 0 then
+                State.TotalHops = State.TotalHops + 1
+                Status.Text = "Teleporting..."
+                pcall(function()
+                    TeleportService:TeleportToPlaceInstance(PlaceId, servers[math.random(#servers)], LocalPlayer)
+                end)
+                task.wait(5)
+            end
+        end
+        
+        Status.Text = "Hop failed, retrying..."
+        task.wait(3)
+        State.IsHopping = false
+    end)
+end
+
+-- Button handlers
+AutoBtn.MouseButton1Click:Connect(function()
+    Config.HopEnabled = not Config.HopEnabled
+    AutoBtn.Text = Config.HopEnabled and "AUTO: ON" or "AUTO: OFF"
+    AutoBtn.BackgroundColor3 = Config.HopEnabled and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(200, 50, 50)
+end)
+
+HopBtn.MouseButton1Click:Connect(HopServer)
+
+-- Main loop (CPU optimized)
 task.spawn(function()
+    -- Boot sequence
     while State.BootTimer > 0 do
-        StatusLabel.Text = string.format("Initializing (%ds)...", math.ceil(State.BootTimer))
-        StatusLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
-        InfoBox.Text = string.format("Zone: Booting\nOnyx: 0\nHops: %d\nStatus: Preparing", State.TotalHops)
+        Status.Text = string.format("Starting... %ds", State.BootTimer)
+        Info.Text = string.format("Zone: Booting\nOres: 0 | Hops: %d", State.TotalHops)
         task.wait(1)
         State.BootTimer = State.BootTimer - 1
     end
     
     State.IsBooting = false
-    State.CurrentJitter = Config.BaseTimeout + (math.random(1, 15) / 10)
     
+    -- Main scanning loop (reduced frequency for CPU)
     while task.wait(Config.ScanInterval) do
-        UpdateMasterScanner()
+        ScanForOres()
         
         if not State.InMiningZone then
-            State.NoOnyxTimer = 0
-            StatusLabel.Text = "Searching for mining zone..."
-            StatusLabel.TextColor3 = Color3.fromRGB(255, 165, 0)
-        elseif State.OnyxCount > 0 then
-            State.NoOnyxTimer = 0
-            State.CurrentJitter = Config.BaseTimeout + (math.random(1, 15) / 10)
-            StatusLabel.Text = string.format("Onyx detected (%d found)", State.OnyxCount)
-            StatusLabel.TextColor3 = Color3.fromRGB(50, 205, 50)
+            State.NoOreTimer = 0
+            Status.Text = "Searching mining zone..."
+            Status.TextColor3 = Color3.fromRGB(255, 200, 100)
+        elseif State.OreCount > 0 then
+            State.NoOreTimer = 0
+            Status.Text = string.format("Ores found: %d", State.OreCount)
+            Status.TextColor3 = Color3.fromRGB(100, 255, 100)
         else
-            State.NoOnyxTimer = State.NoOnyxTimer + Config.ScanInterval
-            local timeLeft = math.max(0, State.CurrentJitter - State.NoOnyxTimer)
-            StatusLabel.Text = string.format("No Onyx - Hop in %.1fs", timeLeft)
-            StatusLabel.TextColor3 = Color3.fromRGB(255, 140, 0)
+            State.NoOreTimer = State.NoOreTimer + Config.ScanInterval
+            local timeLeft = Config.BaseTimeout - State.NoOreTimer
+            Status.Text = string.format("No ores - hop in %.0fs", math.max(0, timeLeft))
+            Status.TextColor3 = Color3.fromRGB(255, 150, 50)
             
-            if State.NoOnyxTimer >= State.CurrentJitter and Config.HopEnabled and not State.IsHopping then 
-                HopServer() 
+            if State.NoOreTimer >= Config.BaseTimeout and Config.HopEnabled and not State.IsHopping then
+                HopServer()
             end
         end
         
-        local zoneStatus = State.InMiningZone and "Active" or "Inactive"
-        local hopStatus = not Config.HopEnabled and "Auto Hop OFF" or 
-                         (State.NoOnyxTimer > 0 and "Hop Scheduled" or "Monitoring")
-        
-        InfoBox.Text = string.format("Zone: %s\nOnyx: %d\nHops: %d\nStatus: %s", 
-                                    zoneStatus, State.OnyxCount, State.TotalHops, hopStatus)
+        Info.Text = string.format("Zone: %s\nOres: %d | Hops: %d", 
+                                 State.InMiningZone and "Active" or "Inactive",
+                                 State.OreCount, State.TotalHops)
     end
 end)
 
--- Auto farm detection and activation
+-- Lightweight movement (reduced frequency)
 task.spawn(function()
-    while State.IsBooting do task.wait(1) end
-    task.wait(2) 
-    
-    State.IsAutoFarmOn = false 
-    
-    while task.wait(2) do
-        if Config.HopEnabled and not State.IsHopping then
-            
-            if not State.CachedAutoBtn or not State.CachedAutoBtn.Parent then
-                pcall(function()
-                    local searchPatterns = {
-                        "autofarm", "automine", "auto_farm", "auto_mine", 
-                        "autominer", "autofarmer", "mine", "farm"
-                    }
-                    
-                    for _, descendant in pairs(PlayerGui:GetDescendants()) do
-                        if descendant:IsA("GuiButton") or descendant:IsA("ImageButton") or descendant:IsA("TextButton") then
-                            local name = string.lower(descendant.Name)
-                            local text = string.lower(descendant.Text or "")
-                            local parentName = descendant.Parent and string.lower(descendant.Parent.Name) or ""
-                            
-                            for _, pattern in ipairs(searchPatterns) do
-                                if string.find(name, pattern) or string.find(text, pattern) or string.find(parentName, pattern) then
-                                    State.CachedAutoBtn = descendant
-                                    break
-                                end
-                            end
-                            
-                            if State.CachedAutoBtn then break end
-                        end
-                    end
-                end)
-            end
-
-            if State.CachedAutoBtn and State.CachedAutoBtn.Parent then
-                if not State.IsAutoFarmOn then
-                    TitleLabel.Text = "Auto Mining Activated!"
-                    TitleLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
-                    
-                    ForceClickAutoFarm(State.CachedAutoBtn)
-                else
-                    if TitleLabel.Text ~= "Onyx Hunter Pro" then
-                        TitleLabel.Text = "Onyx Hunter Pro"
-                        TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-                    end
-                end
-            end
-        end
-    end
-end)
-
--- Enhanced networking and movement
-task.spawn(function()
-    local Network = ReplicatedStorage:WaitForChild("Network", 10)
-    
-    if not Network then
-        warn("Network folder not found")
-        return
-    end
-
-    -- Movement system
-    task.spawn(function()
-        local lastMoveTime = 0
-        
-        while task.wait(0.4) do
+    while task.wait(Config.MovementInterval) do
+        if Config.HopEnabled and not State.IsHopping and not State.IsBooting and State.TargetPart then
             pcall(function()
-                if Config.HopEnabled and not State.IsHopping and not State.IsBooting and State.TargetPart then
-                    local character = LocalPlayer.Character
-                    if character and character:FindFirstChild("HumanoidRootPart") then
-                        local hrp = character.HumanoidRootPart
-                        local currentTime = tick()
-                        
-                        if currentTime - lastMoveTime > 0.3 then
-                            local targetPos = State.TargetPart.CFrame * CFrame.new(0, 8, 0)
-                            local distance = (hrp.Position - targetPos.Position).Magnitude
-                            
-                            if distance > 8 then 
-                                hrp.CFrame = targetPos 
-                                lastMoveTime = currentTime
-                            end
-                        end
+                local character = LocalPlayer.Character
+                if character and character:FindFirstChild("HumanoidRootPart") then
+                    local hrp = character.HumanoidRootPart
+                    local targetPos = State.TargetPart.CFrame * CFrame.new(0, 5, 0)
+                    if (hrp.Position - targetPos.Position).Magnitude > 10 then
+                        hrp.CFrame = targetPos
                     end
                 end
             end)
         end
-    end)
-
-    -- Damage dealing system
-    task.spawn(function()
-        local lastDamageTime = 0
-        
-        while task.wait(0.08) do
-            pcall(function()
-                if Config.HopEnabled and not State.IsHopping and not State.IsBooting and State.TargetId then
-                    local currentTime = tick()
-                    
-                    if currentTime - lastDamageTime > 0.05 then
-                        local dealDamage = Network:FindFirstChild("Breakables_PlayerDealDamage")
-                        if dealDamage then
-                            if dealDamage:IsA("RemoteEvent") then 
-                                dealDamage:FireServer(State.TargetId)
-                            elseif dealDamage:IsA("RemoteFunction") then 
-                                pcall(function() dealDamage:InvokeServer(State.TargetId) end)
-                            end
-                        end
-                        
-                        local join = Network:FindFirstChild("Breakables_Join")
-                        if join then
-                            if join:IsA("RemoteEvent") then 
-                                join:FireServer(State.TargetId)
-                            elseif join:IsA("RemoteFunction") then 
-                                pcall(function() join:InvokeServer(State.TargetId) end)
-                            end
-                        end
-                        
-                        lastDamageTime = currentTime
-                    end
-                end
-            end)
-        end
-    end)
+    end
 end)
 
--- Performance monitoring
+-- Lightweight damage dealing (reduced frequency)
 task.spawn(function()
-    while task.wait(30) do
-        local currentTime = tick()
-        
-        local cacheSize = 0
-        local oldEntries = {}
-        
-        for key, data in pairs(BlockCache) do
-            cacheSize = cacheSize + 1
-            if currentTime - data.time > CacheTimeout * 5 then
-                table.insert(oldEntries, key)
-            end
-        end
-        
-        for _, key in ipairs(oldEntries) do
-            BlockCache[key] = nil
-        end
-        
-        if cacheSize > 200 then
-            collectgarbage("collect")
+    local Network = ReplicatedStorage:WaitForChild("Network", 5)
+    
+    while task.wait(Config.DamageInterval) do
+        if Config.HopEnabled and not State.IsHopping and not State.IsBooting and State.TargetId and Network then
+            pcall(function()
+                local dealDamage = Network:FindFirstChild("Breakables_PlayerDealDamage")
+                if dealDamage and dealDamage:IsA("RemoteEvent") then
+                    dealDamage:FireServer(State.TargetId)
+                end
+            end)
         end
     end
 end)
 
-print("Onyx Hunter Pro v2.0 - Loaded Successfully!")
-print("- Faster startup and improved performance")
-print("- Enhanced UI with better feedback") 
-print("- Optimized server hopping and scanning")
-print("- Compatible with Roblox Delta executor")
+print("CPU-Optimized Ore Hunter loaded - Low resource usage!")
+print("Scan interval: 2s | Movement: 2s | Damage: 0.5s")
